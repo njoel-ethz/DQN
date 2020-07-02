@@ -14,18 +14,14 @@ import tensorflow as tf
 
 POLICY = CnnPolicy
 GAME = 'Pong-v0'
-TIMESTEPS = 5000
+TIMESTEPS = 100000
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     zipname = GAME.split('-')[0] + "_model.zip"
 
-    """
-    with tf.device('/gpu:0'):
-        a = tf.constant(3.0)
-    with tf.Session() as sess:
-        while True:
-            print(sess.run(a)) """
+    #test_if_gpu()
+
     #print(atari_py.list_games())
     env = gym.make(GAME)
     # Optional: PPO2 requires a vectorized environment to run
@@ -33,8 +29,7 @@ def main():
     #env = DummyVecEnv([lambda: env])
 
 
-    model = DQN(POLICY, env, verbose=1, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1,
-        exploration_final_eps=0.02)
+    model = DQN(POLICY, env, verbose=1) #, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
 
     #model = DQN.load(zipname, env)
 
@@ -71,6 +66,16 @@ def callback(lcl, _glb):
         mean_100ep_reward = round(float(np.mean(lcl['episode_rewards'][-101:-1])), 1)
     is_solved = lcl['self'].num_timesteps > 100 and mean_100ep_reward >= 199
     return not is_solved
+
+def test_if_gpu():
+    with tf.device('/gpu:0'):
+        a = tf.constant(3.0)
+    i = 0
+    with tf.Session() as sess:
+        while i < 100:
+            print(sess.run(a))
+            i += 1
+        return
 
 if __name__ == '__main__':
     main()
