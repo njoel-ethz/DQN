@@ -13,6 +13,52 @@ from stable_baselines.deepq.build_graph import build_train
 from stable_baselines.deepq.policies import DQNPolicy
 
 from tqdm import tqdm
+import cv2
+import torch
+from scipy.ndimage.filters import gaussian_filter
+
+def transform(snippet):
+    ''' stack & noralization '''
+    snippet = np.concatenate(snippet, axis=-1)
+    snippet = torch.from_numpy(snippet).permute(2, 0, 1).contiguous().float()
+    snippet = snippet.mul_(2.).sub_(255).div(255)
+
+    return snippet.view(1,-1,3,snippet.size(1),snippet.size(2)).permute(0,2,1,3,4)
+
+
+def process(model, clip):
+    ''' process one clip and save the predicted saliency map '''
+    with torch.no_grad():
+        smap = model(clip.cuda()).cpu().data[0]
+
+
+    smap = (smap.numpy()*255.).astype(np.int)/255.
+    smap = gaussian_filter(smap, sigma=7)
+    smap = cv2.resize(smap, (160, 210))
+
+    return (smap/np.max(smap)*255.).astype(np.uint8)
+
+def produce_saliency_maps(snippet, obs, len_temporal, sal_model):
+    img = cv2.resize(obs, (384, 224))
+    img = img[..., ::-1]
+    snippet.append(img)
+    count = 0
+    # not enough previous frames to produce correct saliency prediction on first 31 frames
+    while len(snippet) < len_temporal:
+        count += 1
+        snippet.append(img)
+
+    clip = transform(snippet)
+    smap = process(sal_model, clip)
+    # shape of obs & smap each: (210, 160, 3) np array
+    smap = cv2.cvtColor(smap, cv2.COLOR_GRAY2RGB)
+
+    if count>0:
+        print('imputed ' + str(count) + ' frames')
+
+    del snippet[0]
+
+    return snippet, smap
 
 class DQN(OffPolicyRLModel):
     """
@@ -57,7 +103,7 @@ class DQN(OffPolicyRLModel):
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.1,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, batch_size=32, double_q=True,
-                 learning_starts=1000, target_network_update_freq=500, prioritized_replay=False,
+                 learning_starts=200, target_network_update_freq=500, prioritized_replay=False, #learning_starts=1000
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_beta_iters=None,
                  prioritized_replay_eps=1e-6, param_noise=False,
                  n_cpu_tf_sess=None, verbose=0, tensorboard_log=None,
@@ -151,7 +197,7 @@ class DQN(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
-              reset_num_timesteps=True, replay_wrapper=None):
+              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -195,7 +241,28 @@ class DQN(OffPolicyRLModel):
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
 
+            len_temporal = 32
+            snippet = []
+
             for _ in tqdm(range(total_timesteps)):
+                """
+                APPLY SALIENCY PREDICTION ON OBSERVATION
+
+                obs is changed to either
+                2 images with saliency information on the 2nd image
+                or 1 image with a saliency transformation directly on the observation
+                """
+                if use_saliency and sal_model == None:
+                    print("Please use valid saliency prediction model")
+                    return
+
+                if use_saliency:
+                    snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+                    o1, o2, o3 = cv2.split(obs)
+                    s1, s2, s3 = cv2.split(smap)
+                    obs = cv2.merge((o1, o2, o3, s1, s2, s3))
+                    #print(obs.shape)
+
                 # Take action and update exploration to the newest value
                 kwargs = {}
                 if not self.param_noise:
@@ -219,6 +286,13 @@ class DQN(OffPolicyRLModel):
                 reset = False
                 new_obs, rew, done, info = self.env.step(env_action)
 
+                new_obs_backup = new_obs
+                if use_saliency:
+                    _, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
+                    o1, o2, o3 = cv2.split(new_obs)
+                    s1, s2, s3 = cv2.split(smap)
+                    new_obs = cv2.merge((o1, o2, o3, s1, s2, s3))
+
                 self.num_timesteps += 1
 
                 # Stop training if return value is False
@@ -235,14 +309,15 @@ class DQN(OffPolicyRLModel):
 
                 #print(obs_.shape) --> (210, 160, 3) Image in np format
 
+                """ 
+                REPLAY BUFFER 
                 """
-                PREPARE SNIPPET FOR SALIENCY PREDICTION HERE
-                """
-                model = None
-                snippet = None
                 # Store transition in the replay buffer.
-                self.replay_buffer_add(obs_, action, reward_, new_obs_, done, info, model=model, snippet=snippet)
-                obs = new_obs
+                self.replay_buffer_add(obs_, action, reward_, new_obs_, done, info)
+
+                obs = new_obs_backup
+
+
                 # Save the unnormalized observation
                 if self._vec_normalize_env is not None:
                     obs_ = new_obs_
