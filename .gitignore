@@ -99,3 +99,5 @@ stable_baselines/td3/
 stable_baselines/trpo_mpi/
 
 stable_baselines/__init__.py
+
+qualitative_videos/

@@ -197,7 +197,7 @@ class DQN(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
-              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None):
+              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -244,24 +244,18 @@ class DQN(OffPolicyRLModel):
             len_temporal = 32
             snippet = []
 
-            for _ in tqdm(range(total_timesteps)):
-                """
-                APPLY SALIENCY PREDICTION ON OBSERVATION
+            if use_saliency and sal_model == None:
+                print("Please use valid saliency prediction model")
+                return
 
-                obs is changed to either
-                2 images with saliency information on the 2nd image
-                or 1 image with a saliency transformation directly on the observation
-                """
-                if use_saliency and sal_model == None:
-                    print("Please use valid saliency prediction model")
-                    return
+            if use_saliency:
+                snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+                o1, o2, o3 = obs[:,:,0], obs[:,:,1], obs[:,:,2]
+                s1, s2, s3 = smap[:,:,0], smap[:,:,1], smap[:,:,2]
+                obs = np.dstack((o1, o2, o3, s1, s2, s3))
+                #print(obs.shape)
 
-                if use_saliency:
-                    snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-                    o1, o2, o3 = cv2.split(obs)
-                    s1, s2, s3 = cv2.split(smap)
-                    obs = cv2.merge((o1, o2, o3, s1, s2, s3))
-                    #print(obs.shape)
+            for i in tqdm(range(total_timesteps)):
 
                 # Take action and update exploration to the newest value
                 kwargs = {}
@@ -286,12 +280,27 @@ class DQN(OffPolicyRLModel):
                 reset = False
                 new_obs, rew, done, info = self.env.step(env_action)
 
-                new_obs_backup = new_obs
+                """
+                APPLY SALIENCY PREDICTION ON OBSERVATION
+
+                obs is changed to either
+                2 images with saliency information on the 2nd image
+                or 1 image with a saliency transformation directly on the observation
+                
+                every n iterations
+                """
+
                 if use_saliency:
-                    _, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
-                    o1, o2, o3 = cv2.split(new_obs)
-                    s1, s2, s3 = cv2.split(smap)
-                    new_obs = cv2.merge((o1, o2, o3, s1, s2, s3))
+                    if i%n==0:
+                        _, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
+                    else:
+                        img = cv2.resize(obs, (384, 224))
+                        img = img[..., ::-1]
+                        snippet.append(img)
+                        del snippet[0]
+                    o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                    s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                    new_obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
                 self.num_timesteps += 1
 
@@ -315,7 +324,7 @@ class DQN(OffPolicyRLModel):
                 # Store transition in the replay buffer.
                 self.replay_buffer_add(obs_, action, reward_, new_obs_, done, info)
 
-                obs = new_obs_backup
+                obs = new_obs
 
 
                 # Save the unnormalized observation
@@ -335,6 +344,12 @@ class DQN(OffPolicyRLModel):
                         episode_successes.append(float(maybe_is_success))
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
+
+                        snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+                        o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                        s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                        obs = np.dstack((o1, o2, o3, s1, s2, s3))
+
                     episode_rewards.append(0.0)
                     reset = True
 

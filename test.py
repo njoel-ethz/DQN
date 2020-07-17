@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 from scipy.ndimage.filters import gaussian_filter
+from PIL import Image, ImageDraw, ImageFont
 
 import tensorflow as tf
 from stable_baselines.deepq.policies import MlpPolicy, LnMlpPolicy, CnnPolicy, LnCnnPolicy
@@ -15,15 +16,15 @@ from stable_baselines import DQN
 import torch
 from sal_model import TASED_v2
 
-
-TRAIN_MODEL = True
-USE_SALIENCY = False
+TIMESTEPS = 1000
+TRAIN_MODEL = False
+USE_SALIENCY = True
 #if True, change Tensor Shape in \common\base_class.py
 
 POLICY = CnnPolicy
-GAME = 'SpaceInvaders-v0'
-TIMESTEPS = 5000000
-SALIENCY_WEIGHTS = 'montezuma_weights.pt'
+GAME = 'Enduro-v0'
+SALIENCY_WEIGHTS = 'TASED_updated.pt'
+EVERY_N_ITERATIONS = 10
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -50,35 +51,85 @@ def main():
         print('--- TRAINING PHASE ---')
         print(GAME.split('-')[0].upper())
 
-        model.learn(total_timesteps=TIMESTEPS, callback=callback, use_saliency=USE_SALIENCY, sal_model=sal_model)
+        model.learn(total_timesteps=TIMESTEPS, callback=callback, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS)
 
         print("Saving model to " + zipname)
         model.save(os.path.join('trained_models', zipname))
     else:
         model = DQN.load(os.path.join('trained_models', zipname), env)
+        print('RL model loaded')
 
-    obs = env.reset()
     snippet = []
     len_temporal = 32
+    obs_for_video, smap_for_video = [], []
+
+    obs = env.reset()
+    if USE_SALIENCY:
+        snippet, obs = initial_sal(obs, snippet, len_temporal, sal_model)
 
     print('--- TEST PHASE ---')
-    for i in tqdm(range(5000)):
-        """
-        SALIENCY PREDICTION ON OBSERVATION
-        """
-        if USE_SALIENCY:
-            snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-            o1, o2, o3 = cv2.split(obs)
-            s1, s2, s3 = cv2.split(smap)
-            obs = cv2.merge((o1, o2, o3, s1, s2, s3))
+    for i in tqdm(range(500)):
+
+        """ Save observation and saliency map for qualitative analysis """
+        if i < 300 and USE_SALIENCY:
+            obs_for_video.append(obs[:, :, :3])
+            smap_for_video.append(obs[:, :, 3:])
         else:
             time.sleep(0.01)
         action, _states = model.predict(obs)
         obs, rewards, dones, info = env.step(action)
         env.render()
 
+        """ SALIENCY PREDICTION ON OBSERVATION """
+        if USE_SALIENCY:
+            if i%EVERY_N_ITERATIONS==0:
+                snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+            else:
+                img = cv2.resize(obs, (384, 224))
+                img = img[..., ::-1]
+                snippet.append(img)
+                del snippet[0]
+            o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+            s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+            obs = np.dstack((o1, o2, o3, s1, s2, s3))
+
+    produce_video(obs_for_video, smap_for_video , GAME, EVERY_N_ITERATIONS)
+
     print('--- DONE ---')
 
+def initial_sal(obs, snippet, len_temporal, sal_model):
+    snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+    o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+    s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+    obs = np.dstack((o1, o2, o3, s1, s2, s3))
+    return snippet, obs
+
+def produce_video(obs_list, smap_list, game, n):
+    if len(obs_list)==0:
+        print('No data for video available')
+        return
+
+    dir = 'qualitative_videos'
+    if not os.path.isdir(dir):
+        os.makedirs(dir)
+    name = game.split('-')[0] + '_' + str(n)
+
+    height, width, _ = obs_list[0].shape
+    video_array = []
+    for i in range(len(obs_list)):
+        temp_frame = Image.fromarray(obs_list[i])
+        temp_map = cv2.cvtColor(smap_list[i], cv2.COLOR_RGB2GRAY)
+        temp_map = Image.fromarray(temp_map)
+        red_img = Image.new('RGB', (160, 210), (0, 0, 255))
+        temp_frame.paste(red_img, mask=temp_map)
+        temp_frame = np.array(temp_frame)
+        video_array.append(temp_frame)
+
+    video = cv2.VideoWriter(os.path.join(dir, name + '.mp4'), cv2.VideoWriter_fourcc(*'DIVX'), 24, (width, height))
+    print('Writing video to ' + os.path.join(dir, name + '.mp4'))
+    for i in range(len(video_array)):
+        video.write(video_array[i])
+    video.release()
 
 def produce_saliency_maps(snippet, obs, len_temporal, sal_model):
     img = cv2.resize(obs, (384, 224))
