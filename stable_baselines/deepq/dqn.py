@@ -103,7 +103,7 @@ class DQN(OffPolicyRLModel):
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.1,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, batch_size=32, double_q=True,
-                 learning_starts=200, target_network_update_freq=500, prioritized_replay=False, #learning_starts=1000
+                 learning_starts=2000, target_network_update_freq=500, prioritized_replay=False, #learning_starts=1000
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_beta_iters=None,
                  prioritized_replay_eps=1e-6, param_noise=False,
                  n_cpu_tf_sess=None, verbose=0, tensorboard_log=None,
@@ -294,11 +294,11 @@ class DQN(OffPolicyRLModel):
                     if i%n==0:
                         _, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
                     else:
-                        img = cv2.resize(obs, (384, 224))
+                        img = cv2.resize(new_obs, (384, 224))
                         img = img[..., ::-1]
                         snippet.append(img)
                         del snippet[0]
-                    o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                    o1, o2, o3 = new_obs[:, :, 0], new_obs[:, :, 1], new_obs[:, :, 2]
                     s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
                     new_obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
@@ -345,10 +345,11 @@ class DQN(OffPolicyRLModel):
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
 
-                        snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-                        o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
-                        s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
-                        obs = np.dstack((o1, o2, o3, s1, s2, s3))
+                        if use_saliency:
+                            snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
+                            o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                            s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                            obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
                     episode_rewards.append(0.0)
                     reset = True

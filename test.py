@@ -16,20 +16,20 @@ from stable_baselines import DQN
 import torch
 from sal_model import TASED_v2
 
-TIMESTEPS = 1000
-TRAIN_MODEL = False
-USE_SALIENCY = True
+TIMESTEPS = 1000000
+TRAIN_MODEL = True
+USE_SALIENCY = False
 #if True, change Tensor Shape in \common\base_class.py
 
 POLICY = CnnPolicy
 GAME = 'Enduro-v0'
-SALIENCY_WEIGHTS = 'TASED_updated.pt'
-EVERY_N_ITERATIONS = 10
+SALIENCY_WEIGHTS = 'montezuma_weights.pt'
+EVERY_N_ITERATIONS = 5
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     if USE_SALIENCY:
-        zipname = GAME.split('-')[0] + "_sal_model.zip"
+        zipname = GAME.split('-')[0] + '_' + str(EVERY_N_ITERATIONS) + "_sal_model.zip"
     else:
         zipname = GAME.split('-')[0] + "_model.zip"
 
@@ -46,18 +46,18 @@ def main():
         if not os.path.isdir('trained_models'):
             os.makedirs('trained_models')
 
-        model = DQN(POLICY, env, verbose=1) #, learning_rate=1e-3, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
+        model = DQN(POLICY, env, verbose=1, learning_rate=1e-4) #, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
 
         print('--- TRAINING PHASE ---')
         print(GAME.split('-')[0].upper())
 
-        model.learn(total_timesteps=TIMESTEPS, callback=callback, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS)
+        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, callback=callback)
 
         print("Saving model to " + zipname)
         model.save(os.path.join('trained_models', zipname))
     else:
         model = DQN.load(os.path.join('trained_models', zipname), env)
-        print('RL model loaded')
+        print('RL model loaded: ' + zipname)
 
     snippet = []
     len_temporal = 32
@@ -200,7 +200,7 @@ def build_sal_model(file_weight, sal_flag):
         print('weight file?')
 
     model = model.cuda()
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = False
     model.eval()
 
     return model
@@ -218,7 +218,7 @@ def callback(lcl, _glb):
         mean_100ep_reward = -np.inf
     else:
         mean_100ep_reward = round(float(np.mean(lcl['episode_rewards'][-101:-1])), 1)
-    is_solved = lcl['self'].num_timesteps > 100 and mean_100ep_reward >= 299 #199
+    is_solved = lcl['self'].num_timesteps > 100 and mean_100ep_reward >= 29900000 #199
     return not is_solved
 
 def test_if_gpu():
