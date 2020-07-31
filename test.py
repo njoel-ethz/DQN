@@ -20,18 +20,19 @@ TIMESTEPS = 1000000
 TRAIN_MODEL = True
 USE_SALIENCY = False
 #if True, change Tensor Shape in \common\base_class.py
+#LOAD_MODEL = False
 
 POLICY = CnnPolicy
 GAME = 'Enduro-v0'
-SALIENCY_WEIGHTS = 'montezuma_weights.pt'
-EVERY_N_ITERATIONS = 5
+SALIENCY_WEIGHTS = 'enduro_weights_3000.pt'
+EVERY_N_ITERATIONS = 2
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     if USE_SALIENCY:
-        zipname = GAME.split('-')[0] + '_' + str(EVERY_N_ITERATIONS) + "_sal_model.zip"
+        zipname = GAME.split('-')[0] + '_' + str(EVERY_N_ITERATIONS) + "_sal_model"
     else:
-        zipname = GAME.split('-')[0] + "_model.zip"
+        zipname = GAME.split('-')[0] + "_model"
 
     #test_if_gpu()
     #print(atari_py.list_games())
@@ -46,18 +47,18 @@ def main():
         if not os.path.isdir('trained_models'):
             os.makedirs('trained_models')
 
-        model = DQN(POLICY, env, verbose=1, learning_rate=1e-4) #, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
+        model = DQN(POLICY, env, verbose=1, learning_rate=1e-3) #, seed=42, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
 
         print('--- TRAINING PHASE ---')
         print(GAME.split('-')[0].upper())
 
-        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, callback=callback)
+        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, callback=callback, zipname=zipname)
 
-        print("Saving model to " + zipname)
-        model.save(os.path.join('trained_models', zipname))
+        print("Saving model to " + zipname + '_final.zip')
+        model.save(os.path.join('trained_models', zipname + '_final.zip'))
     else:
-        model = DQN.load(os.path.join('trained_models', zipname), env)
-        print('RL model loaded: ' + zipname)
+        model = DQN.load(os.path.join('trained_models', zipname + '_final.zip'), env)
+        print('RL model loaded: ' + zipname + '_final.zip')
 
     snippet = []
     len_temporal = 32
@@ -68,7 +69,7 @@ def main():
         snippet, obs = initial_sal(obs, snippet, len_temporal, sal_model)
 
     print('--- TEST PHASE ---')
-    for i in tqdm(range(500)):
+    for i in tqdm(range(1000)):
 
         """ Save observation and saliency map for qualitative analysis """
         if i < 300 and USE_SALIENCY:

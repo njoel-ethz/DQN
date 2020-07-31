@@ -16,6 +16,8 @@ from tqdm import tqdm
 import cv2
 import torch
 from scipy.ndimage.filters import gaussian_filter
+import os
+import csv
 
 def transform(snippet):
     ''' stack & noralization '''
@@ -197,7 +199,7 @@ class DQN(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
-              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1):
+              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1, zipname=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -256,6 +258,11 @@ class DQN(OffPolicyRLModel):
                 #print(obs.shape)
 
             for i in tqdm(range(total_timesteps)):
+                #save current model
+                if i%500000==0 and i>1:
+                    print("Saving model to " + zipname + '_step' + str(i) + '.zip')
+                    self.save(os.path.join('trained_models', zipname + '_step' + str(i) + '.zip'))
+
 
                 # Take action and update exploration to the newest value
                 kwargs = {}
@@ -421,6 +428,15 @@ class DQN(OffPolicyRLModel):
                     logger.record_tabular("% time spent exploring",
                                           int(100 * self.exploration.value(self.num_timesteps)))
                     logger.dump_tabular()
+        temp = 0
+        reward_file = os.path.join('measurements', zipname + '_reward_' + str(temp) + '.csv')
+        while os.path.isfile(reward_file):
+            temp += 1
+            reward_file = os.path.join('measurements', zipname + '_reward_' + str(temp) + '.csv')
+        with open(reward_file, "w", newline='') as f:
+            writer = csv.writer(f)
+            for element in episode_rewards:
+                writer.writerow([element])
 
         callback.on_training_end()
         return self
