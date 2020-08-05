@@ -429,10 +429,14 @@ class DQN(OffPolicyRLModel):
                                           int(100 * self.exploration.value(self.num_timesteps)))
                     logger.dump_tabular()
         temp = 0
-        reward_file = os.path.join('measurements', zipname + '_reward_' + str(temp) + '.csv')
+        if use_saliency:
+            directory = 'n='+str(n)
+        else:
+            directory = 'without_saliency'
+        reward_file = os.path.join('measurements', directory, zipname + '_reward_' + str(temp) + '.csv')
         while os.path.isfile(reward_file):
             temp += 1
-            reward_file = os.path.join('measurements', zipname + '_reward_' + str(temp) + '.csv')
+            reward_file = os.path.join('measurements', directory, zipname + '_reward_' + str(temp) + '.csv')
         with open(reward_file, "w", newline='') as f:
             writer = csv.writer(f)
             for element in episode_rewards:

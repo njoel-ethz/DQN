@@ -101,3 +101,5 @@ stable_baselines/trpo_mpi/
 stable_baselines/__init__.py
 
 qualitative_videos/
+
+measurements/
