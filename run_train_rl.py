@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 from scipy.ndimage.filters import gaussian_filter
 from PIL import Image, ImageDraw, ImageFont
+import random
 
 import tensorflow as tf
 from stable_baselines.deepq.policies import MlpPolicy, LnMlpPolicy, CnnPolicy, LnCnnPolicy
@@ -16,10 +17,10 @@ from stable_baselines import DQN
 import torch
 from sal_model import TASED_v2
 
-TIMESTEPS = 1000000
+TIMESTEPS = 500000
 TRAIN_MODEL = True
-USE_SALIENCY = False
-#if True, change Tensor Shape in \common\base_class.py
+USE_SALIENCY = True
+#if True, change Tensor Shape in \stable_baselines\common\base_class.py
 #LOAD_MODEL = False
 
 POLICY = CnnPolicy
@@ -47,12 +48,13 @@ def main():
         if not os.path.isdir('trained_models'):
             os.makedirs('trained_models')
 
-        model = DQN(POLICY, env, verbose=1, learning_rate=1e-5) #, seed=42, buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
+        seed = random.randint(0, 99999)
+        model = DQN(POLICY, env, verbose=1, learning_rate=1e-5, seed=seed) # ,buffer_size=50000, exploration_fraction=0.1, exploration_final_eps=0.02)
 
         print('--- TRAINING PHASE ---')
         print(GAME.split('-')[0].upper())
 
-        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, callback=callback, zipname=zipname)
+        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, zipname=zipname) #, callback=callback)
 
         print("Saving model to " + zipname + '_final.zip')
         model.save(os.path.join('trained_models', zipname + '_final.zip'))
@@ -95,6 +97,7 @@ def main():
             obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
     produce_video(obs_for_video, smap_for_video , GAME, EVERY_N_ITERATIONS)
+    os.system('python run_reward_plot.py')
 
     print('--- DONE ---')
 

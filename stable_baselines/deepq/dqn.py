@@ -18,6 +18,7 @@ import torch
 from scipy.ndimage.filters import gaussian_filter
 import os
 import csv
+from PIL import Image
 
 def transform(snippet):
     ''' stack & noralization '''
@@ -198,8 +199,24 @@ class DQN(OffPolicyRLModel):
 
                 self.summary = tf.summary.merge_all()
 
+    def visualize(self, smap, obs):
+        smap = cv2.cvtColor(smap, cv2.COLOR_RGB2GRAY)
+        mask = Image.fromarray(smap)  # gives a 384x224 Image object
+        obs = Image.fromarray(obs)
+        red_img = Image.new('RGB', (160, 210), (0, 0, 255))
+        obs.paste(red_img, mask=mask)
+
+        combined_img = np.array(obs)
+
+        # cv2.imshow('debug', combined_img)
+        # cv2.waitKey()
+
+        return combined_img
+
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
               reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1, zipname=None):
+
+        COMBINED_IMAGE = True
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -250,11 +267,16 @@ class DQN(OffPolicyRLModel):
                 print("Please use valid saliency prediction model")
                 return
 
+            #initialization of snippet
             if use_saliency:
                 snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-                o1, o2, o3 = obs[:,:,0], obs[:,:,1], obs[:,:,2]
-                s1, s2, s3 = smap[:,:,0], smap[:,:,1], smap[:,:,2]
-                obs = np.dstack((o1, o2, o3, s1, s2, s3))
+                if COMBINED_IMAGE:
+                    obs = self.visualize(smap, obs)
+                else:
+                    o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                    s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                    obs = np.dstack((o1, o2, o3, s1, s2, s3))
+                    obs = np.dstack((o1, o2, o3, s1, s2, s3))
                 #print(obs.shape)
 
             for i in tqdm(range(total_timesteps)):
@@ -299,15 +321,19 @@ class DQN(OffPolicyRLModel):
 
                 if use_saliency:
                     if i%n==0:
-                        _, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
+                        snippet, smap = produce_saliency_maps(snippet, new_obs, len_temporal, sal_model)
                     else:
                         img = cv2.resize(new_obs, (384, 224))
                         img = img[..., ::-1]
                         snippet.append(img)
                         del snippet[0]
-                    o1, o2, o3 = new_obs[:, :, 0], new_obs[:, :, 1], new_obs[:, :, 2]
-                    s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
-                    new_obs = np.dstack((o1, o2, o3, s1, s2, s3))
+
+                    if COMBINED_IMAGE:
+                        new_obs = self.visualize(smap, new_obs)
+                    else:
+                        o1, o2, o3 = new_obs[:, :, 0], new_obs[:, :, 1], new_obs[:, :, 2]
+                        s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                        new_obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
                 self.num_timesteps += 1
 
@@ -354,10 +380,14 @@ class DQN(OffPolicyRLModel):
 
                         if use_saliency:
                             snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-                            o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
-                            s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
-                            obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
+                            if COMBINED_IMAGE:
+                                obs = self.visualize(smap, obs)
+                            else:
+                                o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                                s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                                obs = np.dstack((o1, o2, o3, s1, s2, s3))
+                    print('Reward(' + str(len(episode_rewards)) + '): ' + str(episode_rewards[-1]))
                     episode_rewards.append(0.0)
                     reset = True
 
@@ -431,6 +461,8 @@ class DQN(OffPolicyRLModel):
         temp = 0
         if use_saliency:
             directory = 'n='+str(n)
+            if COMBINED_IMAGE:
+                directory = 'saliency_overlaid'
         else:
             directory = 'without_saliency'
         reward_file = os.path.join('measurements', directory, zipname + '_reward_' + str(temp) + '.csv')
@@ -438,6 +470,9 @@ class DQN(OffPolicyRLModel):
             temp += 1
             reward_file = os.path.join('measurements', directory, zipname + '_reward_' + str(temp) + '.csv')
         with open(reward_file, "w", newline='') as f:
+            first_row = 'SEED_'+str(self.seed)
+            f.write(first_row)
+            f.write('\n')
             writer = csv.writer(f)
             for element in episode_rewards:
                 writer.writerow([element])

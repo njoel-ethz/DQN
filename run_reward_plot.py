@@ -18,7 +18,6 @@ def main():
         min_length = {}
 
         for input_file in os.listdir(path_indata):
-            # unzip
             if input_file.endswith(".csv"):
                 game_name = input_file.split('_')[0]
                 data[game_name] = []  #e.g. data[Enduro]
@@ -31,7 +30,14 @@ def main():
                 reward_file = os.path.join(path_indata, input_file.split('.')[0] + '.png')
                 averaged_reward_file = os.path.join(path_indata, input_file.split('.')[0] + '_averaged.png')
 
-                rewards = [float(row[0]) for row in csv.reader(open(os.path.join(path_indata, input_file)))]
+                rewards = [row[0] for row in csv.reader(open(os.path.join(path_indata, input_file)))]
+
+                if 'SEED' in rewards[0]:
+                    seed = rewards[0].split('_')[1]
+                    rewards = rewards[1:]
+                    #print('found seed: ' + seed)
+                rewards = [float(item) for item in rewards]
+
                 averaged_rewards = []
                 temp_sum = 0
                 index_stats = []
