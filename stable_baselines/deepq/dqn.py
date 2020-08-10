@@ -203,8 +203,8 @@ class DQN(OffPolicyRLModel):
         smap = cv2.cvtColor(smap, cv2.COLOR_RGB2GRAY)
         mask = Image.fromarray(smap)  # gives a 384x224 Image object
         obs = Image.fromarray(obs)
-        red_img = Image.new('RGB', (160, 210), (0, 0, 255))
-        obs.paste(red_img, mask=mask)
+        yellow_img = Image.new('RGB', (160, 210), (0, 255, 255)) # actually BGR
+        obs.paste(yellow_img, mask=mask)
 
         combined_img = np.array(obs)
 
@@ -214,9 +214,7 @@ class DQN(OffPolicyRLModel):
         return combined_img
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
-              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1, zipname=None):
-
-        COMBINED_IMAGE = True
+              reset_num_timesteps=True, replay_wrapper=None, use_saliency=False, sal_model=None, n=1, zipname=None, combined_image=False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -270,7 +268,7 @@ class DQN(OffPolicyRLModel):
             #initialization of snippet
             if use_saliency:
                 snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
-                if COMBINED_IMAGE:
+                if combined_image:
                     obs = self.visualize(smap, obs)
                 else:
                     o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
@@ -328,7 +326,7 @@ class DQN(OffPolicyRLModel):
                         snippet.append(img)
                         del snippet[0]
 
-                    if COMBINED_IMAGE:
+                    if combined_image:
                         new_obs = self.visualize(smap, new_obs)
                     else:
                         o1, o2, o3 = new_obs[:, :, 0], new_obs[:, :, 1], new_obs[:, :, 2]
@@ -381,7 +379,7 @@ class DQN(OffPolicyRLModel):
                         if use_saliency:
                             snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
 
-                            if COMBINED_IMAGE:
+                            if combined_image:
                                 obs = self.visualize(smap, obs)
                             else:
                                 o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
@@ -461,7 +459,7 @@ class DQN(OffPolicyRLModel):
         temp = 0
         if use_saliency:
             directory = 'n='+str(n)
-            if COMBINED_IMAGE:
+            if combined_image:
                 directory = 'saliency_overlaid'
         else:
             directory = 'without_saliency'

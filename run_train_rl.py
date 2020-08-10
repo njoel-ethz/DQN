@@ -22,6 +22,7 @@ TRAIN_MODEL = True
 USE_SALIENCY = True
 #if True, change Tensor Shape in \stable_baselines\common\base_class.py
 #LOAD_MODEL = False
+COMBINED_IMAGE = True
 
 POLICY = CnnPolicy
 GAME = 'Enduro-v0'
@@ -32,6 +33,9 @@ def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     if USE_SALIENCY:
         zipname = GAME.split('-')[0] + '_' + str(EVERY_N_ITERATIONS) + "_sal_model"
+        if COMBINED_IMAGE:
+            zipname = GAME.split('-')[0] + '_' + str(EVERY_N_ITERATIONS) + "_sal_overlaid_model"
+
     else:
         zipname = GAME.split('-')[0] + "_model"
 
@@ -54,7 +58,7 @@ def main():
         print('--- TRAINING PHASE ---')
         print(GAME.split('-')[0].upper())
 
-        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, zipname=zipname) #, callback=callback)
+        model.learn(total_timesteps=TIMESTEPS, use_saliency=USE_SALIENCY, sal_model=sal_model, n=EVERY_N_ITERATIONS, zipname=zipname, combined_image=COMBINED_IMAGE) #, callback=callback)
 
         print("Saving model to " + zipname + '_final.zip')
         model.save(os.path.join('trained_models', zipname + '_final.zip'))
