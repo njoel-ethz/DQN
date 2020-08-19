@@ -200,6 +200,16 @@ class DQN(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def visualize(self, smap, obs):
+        blurred_obs = cv2.GaussianBlur(obs, (21, 21), 0)
+
+        limit = np.array([25,25,25])
+        out = np.where(smap < limit, blurred_obs, obs)
+
+        # cv2.imshow('debug', out)
+        # cv2.waitKey()
+        return out
+
+    def visualize2(self, smap, obs):
         smap = cv2.cvtColor(smap, cv2.COLOR_RGB2GRAY)
         mask = Image.fromarray(smap)  # gives a 384x224 Image object
         obs = Image.fromarray(obs)
@@ -334,6 +344,9 @@ class DQN(OffPolicyRLModel):
                         new_obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
                 self.num_timesteps += 1
+
+                # cv2.imshow('debug', new_obs)
+                # cv2.waitKey()
 
                 # Stop training if return value is False
                 if callback.on_step() is False:

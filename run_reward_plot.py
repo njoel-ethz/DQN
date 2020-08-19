@@ -36,7 +36,10 @@ def main():
                     seed = rewards[0].split('_')[1]
                     rewards = rewards[1:]
                     #print('found seed: ' + seed)
+
+
                 rewards = [float(item) for item in rewards]
+                rewards = rewards[:-1] #discard last unfinished episode
 
                 averaged_rewards = []
                 temp_sum = 0

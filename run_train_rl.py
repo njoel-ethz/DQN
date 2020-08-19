@@ -22,12 +22,12 @@ TRAIN_MODEL = True
 USE_SALIENCY = True
 #if True, change Tensor Shape in \stable_baselines\common\base_class.py
 #LOAD_MODEL = False
-COMBINED_IMAGE = True
+COMBINED_IMAGE = False
 
 POLICY = CnnPolicy
-GAME = 'Enduro-v0'
-SALIENCY_WEIGHTS = 'enduro_weights_1000.pt'
-EVERY_N_ITERATIONS = 2
+GAME = 'SpaceInvaders-v0'
+SALIENCY_WEIGHTS = 'TASED_updated.pt'
+EVERY_N_ITERATIONS = 5
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
