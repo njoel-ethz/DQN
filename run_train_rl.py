@@ -26,8 +26,8 @@ COMBINED_IMAGE = False
 
 POLICY = CnnPolicy
 GAME = 'SpaceInvaders-v0'
-SALIENCY_WEIGHTS = 'TASED_updated.pt'
-EVERY_N_ITERATIONS = 5
+SALIENCY_WEIGHTS = 'space_invaders_weights_1002.pt'
+EVERY_N_ITERATIONS = 2
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -75,7 +75,7 @@ def main():
         snippet, obs = initial_sal(obs, snippet, len_temporal, sal_model)
 
     print('--- TEST PHASE ---')
-    for i in tqdm(range(5000)):
+    for i in tqdm(range(1000)):
 
         """ Save observation and saliency map for qualitative analysis """
         if i < 300 and USE_SALIENCY:
