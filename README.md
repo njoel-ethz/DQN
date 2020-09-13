@@ -1,6 +1,8 @@
 # DQN guided with Saliency Prediction
 
-The algorithm used for comparing the performance of saliency guided Atari agents is based on the implementation of Stable Baselines. Citing Hill et al.:
+The algorithm used for comparing the performance of saliency guided Atari agents is based on the implementation of Stable Baselines.
+
+Citing Hill et al. 2018:
 
 <img src="docs/\_static/img/logo.png" align="right" width="40%"/>
 
