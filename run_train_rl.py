@@ -17,8 +17,8 @@ from stable_baselines import DQN
 import torch
 from sal_model import TASED_v2
 
-TIMESTEPS = 500000
-TRAIN_MODEL = True
+TIMESTEPS = 1000000
+TRAIN_MODEL = False
 USE_SALIENCY = True
 #if True, change Tensor Shape in \stable_baselines\common\base_class.py
 #LOAD_MODEL = False
@@ -26,8 +26,8 @@ COMBINED_IMAGE = False
 
 POLICY = CnnPolicy
 GAME = 'SpaceInvaders-v0'
-SALIENCY_WEIGHTS = 'space_invaders_weights_1002.pt'
-EVERY_N_ITERATIONS = 2
+SALIENCY_WEIGHTS = 'space_invaders_weights.pt'
+EVERY_N_ITERATIONS = 5
 
 def main():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -73,14 +73,22 @@ def main():
     obs = env.reset()
     if USE_SALIENCY:
         snippet, obs = initial_sal(obs, snippet, len_temporal, sal_model)
-
+        if COMBINED_IMAGE:
+            obs = visualize(obs[:, :, 3:], obs[:, :, :3])
     print('--- TEST PHASE ---')
+
+
+
     for i in tqdm(range(1000)):
 
         """ Save observation and saliency map for qualitative analysis """
         if i < 300 and USE_SALIENCY:
-            obs_for_video.append(obs[:, :, :3])
-            smap_for_video.append(obs[:, :, 3:])
+            if COMBINED_IMAGE:
+                obs_for_video.append(obs)
+                smap_for_video.append(obs)
+            else:
+                obs_for_video.append(obs[:, :, :3])
+                smap_for_video.append(obs[:, :, 3:])
         else:
             time.sleep(0.01)
         action, _states = model.predict(obs)
@@ -96,14 +104,27 @@ def main():
                 img = img[..., ::-1]
                 snippet.append(img)
                 del snippet[0]
-            o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
-            s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
-            obs = np.dstack((o1, o2, o3, s1, s2, s3))
+            if COMBINED_IMAGE:
+                obs = visualize(smap, obs)
+            else:
+                o1, o2, o3 = obs[:, :, 0], obs[:, :, 1], obs[:, :, 2]
+                s1, s2, s3 = smap[:, :, 0], smap[:, :, 1], smap[:, :, 2]
+                obs = np.dstack((o1, o2, o3, s1, s2, s3))
 
-    produce_video(obs_for_video, smap_for_video , GAME, EVERY_N_ITERATIONS)
+    produce_video(obs_for_video, smap_for_video , GAME, EVERY_N_ITERATIONS, COMBINED_IMAGE)
     os.system('python run_reward_plot.py')
 
     print('--- DONE ---')
+
+def visualize(smap, obs):
+    blurred_obs = cv2.GaussianBlur(obs, (21, 21), 0)
+
+    limit = np.array([25,25,25])
+    out = np.where(smap < limit, blurred_obs, obs)
+
+    # cv2.imshow('debug', out)
+    # cv2.waitKey()
+    return out
 
 def initial_sal(obs, snippet, len_temporal, sal_model):
     snippet, smap = produce_saliency_maps(snippet, obs, len_temporal, sal_model)
@@ -112,7 +133,7 @@ def initial_sal(obs, snippet, len_temporal, sal_model):
     obs = np.dstack((o1, o2, o3, s1, s2, s3))
     return snippet, obs
 
-def produce_video(obs_list, smap_list, game, n):
+def produce_video(obs_list, smap_list, game, n, combined):
     if len(obs_list)==0:
         print('No data for video available')
         return
@@ -121,17 +142,23 @@ def produce_video(obs_list, smap_list, game, n):
     if not os.path.isdir(dir):
         os.makedirs(dir)
     name = game.split('-')[0] + '_' + str(n)
+    if combined:
+        name = name + '_blurred'
 
     height, width, _ = obs_list[0].shape
     video_array = []
-    for i in range(len(obs_list)):
-        temp_frame = Image.fromarray(obs_list[i])
-        temp_map = cv2.cvtColor(smap_list[i], cv2.COLOR_RGB2GRAY)
-        temp_map = Image.fromarray(temp_map)
-        red_img = Image.new('RGB', (160, 210), (0, 0, 255))
-        temp_frame.paste(red_img, mask=temp_map)
-        temp_frame = np.array(temp_frame)
-        video_array.append(temp_frame)
+
+    if combined:
+        video_array = obs_list
+    else:
+        for i in range(len(obs_list)):
+            temp_frame = Image.fromarray(obs_list[i])
+            temp_map = cv2.cvtColor(smap_list[i], cv2.COLOR_RGB2GRAY)
+            temp_map = Image.fromarray(temp_map)
+            red_img = Image.new('RGB', (160, 210), (0, 0, 255))
+            temp_frame.paste(red_img, mask=temp_map)
+            temp_frame = np.array(temp_frame)
+            video_array.append(temp_frame)
 
     video = cv2.VideoWriter(os.path.join(dir, name + '.mp4'), cv2.VideoWriter_fourcc(*'DIVX'), 24, (width, height))
     print('Writing video to ' + os.path.join(dir, name + '.mp4'))
